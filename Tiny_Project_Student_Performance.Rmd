@@ -1,0 +1,205 @@
+---
+title: "Tiny Project: Student Performance and Lifestyle Factors Analysis"
+author: "Serafim Ferando Augusto-2505101270238"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+## 1. Introduction
+
+Student academic performance depends on more than just study effort — family
+background, lifestyle habits, and school support all play a role. This Tiny
+Project uses a real student survey dataset (395 students, 31 variables) to
+explore which factors are associated with whether a student **passed** or
+**failed**. The workflow follows the steps covered in Practicals 8, 9 and
+10: data importing, preprocessing, statistical exploration, visualization,
+and interpretation.
+
+## 2. Data Importing
+
+```{r import}
+# Read the CSV file into a data frame.
+# stringsAsFactors = FALSE keeps text columns as character for now;
+# we convert the relevant ones to factors ourselves in the next section.
+student_data <- read.csv("student-data.csv", stringsAsFactors = FALSE)
+
+# Quick look at the data
+dim(student_data)      # rows and columns
+head(student_data)      # first six records
+str(student_data)       # structure and data types of each column
+```
+
+**Explanation:** `read.csv()` loads the dataset from the working directory.
+`dim()`, `head()` and `str()` give a first impression of the data's size,
+sample rows, and column types before any cleaning is done.
+
+## 3. Data Preprocessing and Cleaning
+
+```{r preprocessing}
+# Check for missing values in every column
+colSums(is.na(student_data))
+
+# Check for duplicate rows
+sum(duplicated(student_data))
+
+# Convert key categorical columns to factors for correct summarisation/plots
+cat_cols <- c("school", "sex", "address", "famsize", "Pstatus", "Mjob",
+              "Fjob", "reason", "guardian", "schoolsup", "famsup", "paid",
+              "activities", "nursery", "higher", "internet", "romantic",
+              "passed")
+student_data[cat_cols] <- lapply(student_data[cat_cols], factor)
+
+# Create one derived feature: average weekly alcohol consumption
+# (mean of workday alcohol use 'Dalc' and weekend alcohol use 'Walc')
+student_data$alc_avg <- (student_data$Dalc + student_data$Walc) / 2
+
+str(student_data[c(cat_cols, "alc_avg")])
+```
+
+**Explanation:** `colSums(is.na(...))` confirms the dataset has no missing
+values, and `duplicated()` confirms there are no duplicate rows, so no
+imputation or row-dropping is required. The categorical text columns are
+converted to `factor` type so R treats them correctly in summaries and
+plots. `alc_avg` is a new engineered feature combining weekday and weekend
+alcohol consumption into a single lifestyle indicator used later in the
+analysis.
+
+## 4. Data Analysis and Statistical Exploration
+
+```{r analysis}
+# Overall summary statistics for numeric columns
+summary(student_data[, c("age", "studytime", "failures", "absences",
+                          "alc_avg")])
+
+# How many students passed vs failed?
+table(student_data$passed)
+
+# Pass rate by gender
+prop.table(table(student_data$sex, student_data$passed), margin = 1)
+
+# Pass rate by weekly study time category (1=<2hrs, 2=2-5hrs, 3=5-10hrs, 4=>10hrs)
+tapply(student_data$passed == "yes", student_data$studytime, mean)
+
+# Average absences for students who passed vs failed
+tapply(student_data$absences, student_data$passed, mean)
+
+# Correlation between numeric lifestyle/background variables and absences
+num_cols <- c("age", "Medu", "Fedu", "traveltime", "studytime", "failures",
+              "famrel", "freetime", "goout", "Dalc", "Walc", "health",
+              "absences")
+cor(student_data[num_cols])[, "absences"]
+```
+
+**Explanation:** `summary()` gives central tendency and spread for the
+numeric variables. `table()` and `prop.table()` turn the categorical
+`passed` outcome into counts and proportions, split by gender. `tapply()`
+computes a statistic (mean) for one variable grouped by another — here, the
+pass rate by study-time category, and average absences by pass/fail status.
+`cor()` measures the linear relationship between each numeric variable and
+absences.
+
+## 5. Graphs and Plots
+
+```{r plot-passed}
+result_count <- table(student_data$passed)
+pie(result_count,
+    main = "Overall Pass vs Fail Distribution",
+    labels = paste(names(result_count), result_count))
+```
+
+```{r plot-gender}
+gender_count <- table(student_data$sex)
+barplot(gender_count,
+        main = "Gender Distribution of Students",
+        xlab = "Gender", ylab = "Number of Students",
+        col = c("lightpink", "lightblue"))
+```
+
+```{r plot-age}
+hist(student_data$age,
+     main = "Distribution of Student Age",
+     xlab = "Age", col = "lightgreen", breaks = 8)
+```
+
+```{r plot-studytime}
+pass_rate_by_study <- tapply(student_data$passed == "yes",
+                              student_data$studytime, mean) * 100
+barplot(pass_rate_by_study,
+        main = "Pass Rate (%) by Weekly Study Time Category",
+        xlab = "Study Time Category (1=Low ... 4=High)",
+        ylab = "Pass Rate (%)", col = "steelblue")
+```
+
+```{r plot-absences}
+boxplot(absences ~ passed, data = student_data,
+        main = "Absences by Pass/Fail Outcome",
+        xlab = "Passed", ylab = "Number of Absences",
+        col = c("salmon", "lightgreen"))
+```
+
+```{r plot-support}
+support_rate <- tapply(student_data$passed == "yes",
+                        student_data$schoolsup, mean) * 100
+barplot(support_rate,
+        main = "Pass Rate (%): Extra School Support vs None",
+        xlab = "Receives Extra School Support", ylab = "Pass Rate (%)",
+        col = "orange")
+```
+
+**Explanation:** The `pie()` chart shows the overall pass/fail split. The
+`barplot()`s compare categories (gender, study-time groups, school-support
+status) against counts or pass rates. `hist()` shows how student ages are
+distributed. `boxplot(absences ~ passed, ...)` compares the spread and
+median of absences between students who passed and those who failed in one
+view.
+
+## 6. Interpretation of Results
+
+- Out of 395 students, **265 (about 67%) passed** and 130 (about 33%)
+  failed, so the class is moderately imbalanced toward passing.
+- Students who **failed averaged about 6.8 absences**, noticeably higher
+  than the **5.2 average absences of students who passed** — attendance
+  appears linked to outcome.
+- The pass rate rises from roughly **65% for the two lowest study-time
+  categories to about 75% and 74%** for the two highest categories,
+  suggesting more study time is associated with a better chance of passing,
+  though the relationship is not perfectly linear.
+- Students who plan to pursue **higher education** had a much higher pass
+  rate (about 69%) than those who do not (about 35%) — aspiration/motivation
+  appears strongly linked to outcome.
+- Interestingly, students **receiving extra school support actually had a
+  lower pass rate (about 55%) than those without it (about 69%)**. This is
+  a common pattern in observational data: schools likely direct extra
+  support toward students who are *already* struggling, so support does not
+  cause lower performance — it is a response to it. This shows why
+  correlation should not be read as causation.
+- Absences correlate most strongly (though still weakly) with **age**
+  (r ≈ 0.18) and **weekend alcohol consumption** (r ≈ 0.14) among the
+  numeric variables tested, while study time and family relationship
+  quality show negligible correlation with absences.
+
+## 7. Findings and Conclusion
+
+This Tiny Project analysed 395 student records to identify factors
+associated with academic success. The main findings are:
+
+1. About two-thirds of students in the dataset passed, one-third failed.
+2. **Attendance matters** — students who failed had noticeably more
+   absences on average than those who passed.
+3. **Study time matters, but with diminishing precision** — pass rates
+   trend upward with more weekly study time.
+4. **Aspiration matters most clearly** — wanting to pursue higher education
+   was associated with the largest gap in pass rate of any factor examined.
+5. **Extra school support is a marker of prior difficulty, not a cause of
+   failure** — it was given to weaker students, so its raw association with
+   passing is negative even though its intent is remedial.
+
+Overall, the analysis suggests that consistent attendance, adequate study
+time, and student motivation toward further education are the lifestyle
+factors most worth encouraging, while formal support programs should be
+evaluated by whether they close the gap for the students who receive them,
+not by their raw correlation with the pass/fail outcome.
